@@ -40,7 +40,8 @@ font-size: xxx-large;
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(pos, index) in positions" :key="pos.id" style="border-bottom: 1px solid #eee;">
+              <tr v-for="(pos, index) in positions" :key="pos.id" 
+                  :style="{ borderBottom: '1px solid #eee', backgroundColor: activePositionIndex === index ? '#bbdefb' : 'transparent' }">
                 <td style="padding: 12px; font-weight: bold;">{{ index + 1 }}</td>
                 <td style="padding: 12px;">{{ pos.name }}</td>
                 <td style="padding: 12px; font-size: 1.2rem; color: #1976d2; font-weight: bold;">
@@ -176,7 +177,8 @@ export default {
       // Only the START button is disabled by isArmed.
       // ALL other buttons (CW/CCW/HOLD/ADD/DELETE/EDIT/ORDER/SAVE/LOAD) work normally.
       // Any user action while armed → sends DISARM to Arduino → isArmed = false → START re-enabled.
-      isArmed: false
+      isArmed: false,
+      activePositionIndex: -1 // لمعرفة أي نقطة يتم اللحام عليها حالياً
     }
   },
 
@@ -199,14 +201,83 @@ export default {
     }
   },
 
+  mounted() {
+    // إرسال طلب دوري لجلب الحالة الحقيقية من الأردوينو لتجنب فقدان التزامن
+    this.statusInterval = setInterval(() => {
+      // إصلاح التقطيع: لا نطلب STATUS أثناء حركة الموتور لتخفيف الضغط على السيريال
+      if (!this.isMoving && !this.isHoming && !this.isProgramRunning) {
+        this.send({ payload: "STATUS" });
+      }
+    }, 1500);
+
+    // استرجاع النقاط المحفوظة محلياً عند تحديث الصفحة (Refresh)
+    const saved = localStorage.getItem('welding_positions');
+    if (saved) {
+      try {
+        this.positions = JSON.parse(saved);
+        this.nextId = Math.max(...this.positions.map(p => p.id || 0), 0) + 1;
+      } catch(e) {}
+    }
+  },
+
+  beforeDestroy() {
+    if (this.statusInterval) clearInterval(this.statusInterval);
+  },
+
+  unmounted() {
+    if (this.statusInterval) clearInterval(this.statusInterval);
+  },
+
   watch: {
+    positions: {
+      deep: true,
+      handler(newPos) {
+        // حفظ النقاط محلياً لتجنب ضياعها عند عمل Refresh
+        localStorage.setItem('welding_positions', JSON.stringify(newPos));
+      }
+    },
     msg(newMsg) {
       if (!newMsg || !newMsg.payload) return;
       let text = String(newMsg.payload).trim();
 
+      // [1] Structured Parsing (Single Source of Truth)
+      // Example: STATUS|HOMED:1|PROG:0|POS:123|STATE:5
+      if (text.startsWith("STATUS|")) {
+        const parts = text.split('|');
+        parts.forEach(part => {
+          if (part.startsWith('HOMED:')) this.isHomed = (part.split(':')[1] === '1');
+          if (part.startsWith('PROG:'))  this.isProgramRunning = (part.split(':')[1] === '1');
+          if (part.startsWith('POS:'))   this.currentSteps = parseInt(part.split(':')[1]);
+          if (part.startsWith('STATE:')) {
+            const state = parseInt(part.split(':')[1]);
+            // States from Arduino: IDLE=0, HOMING=1, MANUAL_MOVING=2, ARMED=5, PROGRAM_MOVING=7
+            this.isArmed = (state === 5);
+            this.isHoming = (state === 1);
+            this.isMoving = (state === 2 || state === 3 || state === 7 || state === 11);
+            
+            // إصلاح: إذا كان النظام فقط "مسلح" وينتظر الروبوت، يجب فك القفل عن الأزرار
+            // ليتمكن المستخدم من الضغط عليها لإلغاء التسليح (Disarm)
+            if (this.isArmed) {
+              this.isProgramRunning = false;
+            }
+          }
+        });
+        return; // توقف هنا، لقد حصلنا على الحالة اليقينية الكاملة
+      }
+
+      // [2] Transient UI updates (للأحداث العابرة وتنبيهات الأخطاء السريعة)
       // Arduino restarted
+      if (text.startsWith("STATUS:MOVING_TO_POSITION_")) {
+        this.activePositionIndex = parseInt(text.substring(26)) - 1;
+      }
+      
+      if (text === "STATUS:RETURNING_TO_HOME" || text === "STATUS:CYCLE_COMPLETE_PIECE_DONE") {
+        this.activePositionIndex = -1;
+      }
+
       if (text === "SYSTEM_READY") {
         this.isHomed = false;
+        this.activePositionIndex = -1;
         this.isMoving = false;
         this.isHoming = false;
         this.isProgramRunning = false;
@@ -223,6 +294,7 @@ export default {
         this.isHoming = false;
         this.isArmed = false;
         this.currentSteps = 0;
+        this.activePositionIndex = -1;
       }
 
       if (text === "STATUS:MOTOR_STOPPED") {
@@ -313,7 +385,19 @@ export default {
     toggleEdit(pos) {
       if (this.isProgramRunning) { return; }
       if (pos.editing) {
-        // User is saving an edit → positions changed → disarm
+        // User is saving an edit → التحقق من صحة الرقم أولاً
+        const parsedSteps = parseInt(pos.steps);
+        if (isNaN(parsedSteps) || parsedSteps < 0) {
+          alert("خطأ: يجب أن يكون رقم الخطوات موجباً وصحيحاً.");
+          return; // منع الحفظ
+        }
+        if (parsedSteps > 500000) {
+          alert("خطأ: الرقم كبير جداً (أقصى حد 500,000 خطوة).");
+          return; // منع الحفظ
+        }
+        pos.steps = parsedSteps; // حفظ الرقم النظيف
+        
+        // positions changed → disarm
         this.disarmIfArmed();
       }
       pos.editing = !pos.editing;
@@ -377,7 +461,8 @@ export default {
       this.isProgramRunning = false;
       this.isArmed = false;
       this.currentSteps = 0;
-      this.positions = [];
+      this.activePositionIndex = -1;
+      // تم إزالة مسح النقاط من هنا للحفاظ عليها كما هي في الأردوينو
       this.send({ payload: "ESTOP" });
     },
 

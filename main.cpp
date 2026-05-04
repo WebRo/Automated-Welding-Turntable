@@ -143,6 +143,8 @@ enum SystemState {
   RELAY_ACTIVE,      // حالة تفعيل الريلاي (إرسال إشارة 1 ثانية للروبوت)
   WAITING_COBOT,     // حالة انتظار الروبوت (ينتظر رد الروبوت بأنه انتهى)
   DELAY_BEFORE_MOVE, // حالة الانتظار 3 ثواني لتفادي اصطدام الروبوت
+  WELD_COMPLETE_DELAY, // تأخير مجهري 50 ملي ثانية لتحديث اللمبة بدون تجميد
+  RETURNING_HOME,    // حالة العودة لنقطة الصفر في نهاية البرنامج (بدون تجميد)
   ERROR,             // حالة الخطأ أو الطوارئ (لا يمكن عمل شيء إلا بعد التصفير من جديد)
   PROGRAM_COMPLETE   // حالة اكتمال البرنامج (غير مستخدمة في الوضع الجديد)
 };
@@ -252,12 +254,12 @@ void loop() {
   // 2. تحديث المحرك باستمرار (Non-blocking) - لضمان نعومة الحركة وعدم توقف
   // المعالج
   if (currentState == MANUAL_MOVING) {
-    stepper.runSpeed(); // إذا كنا في وضع الدوران اليدوي، نستخدم الحركة المستمرة
-                        // بسرعة ثابتة
+    stepper.runSpeed(); // الدوران اليدوي يعتمد على سرعة ثابتة ومستمرة
   }
-  // للحركة الموجهة (Homing أو تباطؤ أو الذهاب لهدف محدد): نستخدم run()
+  // للحركة الموجهة (التصفير، تباطؤ، أو الذهاب لهدف محدد): نستخدم run()
   else if (stepper.distanceToGo() != 0 || currentState == MANUAL_DECELERATING ||
-           currentState == PROGRAM_MOVING || currentState == HOMING) {
+           currentState == PROGRAM_MOVING || currentState == RETURNING_HOME ||
+           currentState == HOMING) {
     stepper.run();
   }
 
@@ -317,45 +319,13 @@ void performHoming() {
 
   digitalWrite(ENABLE_PIN, LOW);     // تشغيل وتمكين المحرك
   stepper.setMaxSpeed(HOMING_SPEED); // استخدام السرعة البطيئة المخصصة للتصفير
-  stepper.setSpeed(HOMING_SPEED);
+  stepper.setAcceleration(ACCELERATION); // استخدام التسارع لمنع توقف الموتور المفاجئ (Stall)
+  stepper.move(1000000); // إعطاء هدف بعيد جداً للأمام ليستمر بالدوران حتى يلمس المستشعر
 
   homingStartTime = millis(); // حفظ وقت البداية لعد 30 ثانية للطوارئ
   currentState = HOMING;
 
-  // استمر في الدوران طالما أن المستشعر لم يعطِ إشارة الوصول للصفر
-  while (digitalRead(SENSOR_PIN) != SENSOR_HOME_STATE) {
-    stepper.runSpeed(); // حركة خطوة بخطوة
-
-    // التحقق من تجاوز مهلة التصفير 30 ثانية
-    if (millis() - homingStartTime > HOMING_TIMEOUT_MS) {
-      handleError("HOMING_TIMEOUT"); // حدوث خطأ (المستشعر ربما تالف)
-      return;
-    }
-
-    // استماع للطوارئ أثناء التصفير وإمكانية الإيقاف
-    if (Serial.available() > 0) {
-      String cmd = Serial.readStringUntil('\n');
-      cmd.trim();
-      if (cmd == "STOP" || cmd == "ESTOP") {
-        handleEmergencyStop();
-        return;
-      }
-    }
-  }
-
-  // بمجرد الخروج من الـ while (يعني أن المستشعر تم تفعيله):
-  stepper.setCurrentPosition(
-      0);              // تصفير رقم الخطوات داخل الأردوينو ليصبح هو النقطة 0
-  isHomed = true;      // تأكيد نجاح التصفير
-  currentState = IDLE; // إعادة النظام لحالة السكون
-
-  // ملاحظة هامة: لا نحذف مصفوفة النقاط هنا! الزوايا المحفوظة تبقى كما هي
-  // totalPositions = 0; // (تم إزالة هذا السطر بناءً على طلبك بالاحتفاظ بالنقاط)
-
-  updateLED(LED_GREEN); // الإضاءة خضراء لتدل على النجاح
-  sendToNodeRED("HOMED");
-  sendToNodeRED("STATUS:HOME_POSITION_0_STEPS");
-  sendToNodeRED("STATUS:READY_FOR_MANUAL_CONFIGURATION");
+  // سيتم استكمال التصفير في handleSystemState() بدون أي loop يعطل المعالج
 }
 
 // دالة التحرك اليدوي للأمام باستمرار
@@ -611,6 +581,24 @@ void moveToCurrentTarget() {
 void handleSystemState() {
   switch (currentState) {
 
+  // حالة التصفير (البحث عن نقطة الصفر بدون توقيف النظام)
+  case HOMING:
+    if (digitalRead(SENSOR_PIN) == SENSOR_HOME_STATE) {
+      // المستشعر لقط نقطة الصفر
+      stepper.setCurrentPosition(0);
+      isHomed = true;
+      currentState = IDLE;
+
+      updateLED(LED_GREEN);
+      sendToNodeRED("HOMED");
+      sendToNodeRED("STATUS:HOME_POSITION_0_STEPS");
+      sendToNodeRED("STATUS:READY_FOR_MANUAL_CONFIGURATION");
+    } else if (millis() - homingStartTime > HOMING_TIMEOUT_MS) {
+      // تجاوز المهلة المحددة
+      handleError("HOMING_TIMEOUT");
+    }
+    break;
+
   // *** جديد *** انتظار إشارة الروبوت لبدء أو إعادة دورة اللحام
   case ARMED:
     if (digitalRead(RELAY_FROM_COBOT) == LOW) {
@@ -721,6 +709,49 @@ void handleSystemState() {
     }
     break;
 
+  // حالة الوميض الأخضر السريع (50 ملي ثانية) بعد نجاح نقطة اللحام
+  case WELD_COMPLETE_DELAY:
+    if (millis() - delayStartTime >= 50) {
+      currentPositionIndex++; // الانتقال للفهرس (النقطة) التالية
+
+      // التحقق مما إذا كانت هناك نقاط متبقية في البرنامج
+      if (currentPositionIndex < totalPositions) {
+        moveToCurrentTarget(); // التوجه للنقطة التالية
+      } else {
+        // انتهت جميع النقاط - العودة للصفر
+        sendToNodeRED("STATUS:RETURNING_TO_HOME");
+        updateLED(LED_BLUE);
+
+        stepper.setMaxSpeed(MAX_SPEED);
+        stepper.setAcceleration(PROGRAM_ACCELERATION);
+        stepper.moveTo(0);
+
+        currentState = RETURNING_HOME; // الانتقال للحالة الجديدة
+      }
+    }
+    break;
+
+  // حالة العودة لنقطة الصفر في نهاية البرنامج (بشكل غير معطل)
+  case RETURNING_HOME:
+    if (stepper.distanceToGo() == 0) {
+      // *** بعد العودة للصفر: إعادة التسليح تلقائياً بدون الحاجة لضغط START ***
+      currentState = ARMED;
+      updateLED(LED_GREEN);
+      sendToNodeRED("STEPS:0");
+      sendToNodeRED("STATUS:CYCLE_COMPLETE_PIECE_DONE");
+      sendToNodeRED("STATUS:PROGRAM_FINISHED_" + String(totalPositions) + "_OF_" +
+                    String(totalPositions) + "_POSITIONS");
+      sendToNodeRED("STATUS:ARMED_WAITING_FOR_ROBOT_START_SIGNAL"); // انتظار القطعة الجديدة
+    } else {
+      // إرسال تحديث الخطوات أثناء العودة
+      if (millis() - lastStatusTime >= STATUS_UPDATE_INTERVAL_MS) {
+        long currentSteps = stepper.currentPosition();
+        sendToNodeRED("STEPS:" + String(currentSteps));
+        lastStatusTime = millis();
+      }
+    }
+    break;
+
   // أي حالة أخرى لا تتطلب تفاعلاً هنا
   default:
     break;
@@ -746,36 +777,9 @@ void completeWeldPosition() {
   sendToNodeRED("STATUS:WELD_COMPLETE_POSITION_" +
                 String(currentPositionIndex + 1));
   updateLED(LED_GREEN); // وميض سريع أخضر للإشارة للنجاح
-  delay(50);            // تأخير مجهري 50 ملي ثانية لتحديث لون اللمبة بوضوح
 
-  currentPositionIndex++; // الانتقال للفهرس (النقطة) التالية
-
-  // التحقق مما إذا كانت هناك نقاط متبقية في البرنامج
-  if (currentPositionIndex < totalPositions) {
-    moveToCurrentTarget(); // التوجه للنقطة التالية
-  } else {
-    // انتهت جميع النقاط - العودة للصفر ثم إعادة التسليح تلقائياً
-    sendToNodeRED("STATUS:RETURNING_TO_HOME");
-    updateLED(LED_BLUE);
-
-    stepper.setMaxSpeed(MAX_SPEED);
-    stepper.setAcceleration(PROGRAM_ACCELERATION);
-    stepper.moveTo(0);
-
-    while (stepper.distanceToGo() != 0) {
-      stepper.run();
-    }
-
-    // *** بعد العودة للصفر: إعادة التسليح تلقائياً بدون الحاجة لضغط START ***
-    // programRunning يبقى = true (النظام لا يزال تحت سيطرة الروبوت)
-    currentState = ARMED;
-    updateLED(LED_GREEN);
-    sendToNodeRED("STEPS:0");
-    sendToNodeRED("STATUS:CYCLE_COMPLETE_PIECE_DONE");
-    sendToNodeRED("STATUS:PROGRAM_FINISHED_" + String(totalPositions) + "_OF_" +
-                  String(totalPositions) + "_POSITIONS");
-    sendToNodeRED("STATUS:ARMED_WAITING_FOR_ROBOT_START_SIGNAL"); // انتظار القطعة الجديدة
-  }
+  currentState = WELD_COMPLETE_DELAY;
+  delayStartTime = millis(); // إعادة استخدام مؤقت التأخير للـ 50ms
 }
 
 // دالة إدارة إرسال رسائل الخطأ الشاملة (للطوارئ)
