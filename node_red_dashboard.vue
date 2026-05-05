@@ -104,7 +104,7 @@ font-size: xxx-large;
           <!-- MANUAL JOGGING: disabled only when program is ACTIVELY running -->
           <v-row dense>
             <v-col cols="6">
-              <v-btn block color="orange" size="x-large" @click="moveBackward" :disabled="!isHomed || isProgramRunning">
+              <v-btn block color="orange" size="x-large" @click="moveBackward" :disabled="!isHomed || isProgramRunning || currentSteps <= 0">
                 <v-icon left>mdi-minus-box</v-icon> CCW
               </v-btn>
             </v-col>
@@ -155,10 +155,45 @@ font-size: xxx-large;
             </v-col>
           </v-row>
 
+          <v-divider class="my-4"></v-divider>
+          
+          <!-- MOTOR SPEED -->
+          <h3 class="text-grey-darken-1 mb-2">MOTOR SPEED</h3>
+          <v-slider
+            v-model="motorSpeed"
+            min="10"
+            max="100"
+            step="5"
+            thumb-label="always"
+            color="primary"
+            track-color="grey-lighten-2"
+            @update:model-value="updateSpeed"
+            hide-details
+          >
+            <template v-slot:append>
+              <span class="text-h6 font-weight-bold ml-2">{{ motorSpeed }} %</span>
+            </template>
+          </v-slider>
+
         </v-card>
       </v-col>
 
     </v-row>
+
+    <!-- FOOTER -->
+    <v-row class="mt-4">
+      <v-col cols="12">
+        <v-card elevation="2" class="pa-3 text-center" style="background-color: #f8f9fa; border-top: 3px solid #1976d2;">
+          <div style="color: #424242; font-size: 1.1rem;">
+            <strong>Developed by:</strong> <span style="color: #1976d2; font-weight: bold;">Bayram Alak</span>
+            <span class="mx-2">|</span>
+            <v-icon size="small" color="primary" class="mr-1">mdi-email</v-icon>
+            <a href="mailto:eng.bayram@yahoo.com" style="text-decoration: none; color: #1976d2; font-weight: 500;">eng.bayram@yahoo.com</a>
+          </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
   </v-container>
 </template>
 
@@ -176,9 +211,10 @@ export default {
       // isArmed: true = Arduino is in ARMED state waiting for robot signal.
       // Only the START button is disabled by isArmed.
       // ALL other buttons (CW/CCW/HOLD/ADD/DELETE/EDIT/ORDER/SAVE/LOAD) work normally.
-      // Any user action while armed → sends DISARM to Arduino → isArmed = false → START re-enabled.
       isArmed: false,
-      activePositionIndex: -1 // لمعرفة أي نقطة يتم اللحام عليها حالياً
+      activePositionIndex: -1, // لمعرفة أي نقطة يتم اللحام عليها حالياً
+      motorSpeed: 100, // نسبة سرعة المحرك الافتراضية
+      lastSpeedSent: 100 // لتجنب إرسال نفس القيمة عدة مرات
     }
   },
 
@@ -388,11 +424,11 @@ export default {
         // User is saving an edit → التحقق من صحة الرقم أولاً
         const parsedSteps = parseInt(pos.steps);
         if (isNaN(parsedSteps) || parsedSteps < 0) {
-          alert("خطأ: يجب أن يكون رقم الخطوات موجباً وصحيحاً.");
+          alert("The number of steps must be positive and correct.");
           return; // منع الحفظ
         }
         if (parsedSteps > 500000) {
-          alert("خطأ: الرقم كبير جداً (أقصى حد 500,000 خطوة).");
+          alert("The number of steps is too large (maximum 500,000 steps).");
           return; // منع الحفظ
         }
         pos.steps = parsedSteps; // حفظ الرقم النظيف
@@ -431,6 +467,7 @@ export default {
 
     moveBackward() {
       if (!this.isHomed) { alert("Must ZERO first!"); return; }
+      if (this.currentSteps <= 0) { alert("Cannot move below zero!"); return; }
       if (this.isProgramRunning) { return; }
       // If ARMED: only disarm (cancel waiting for robot), do NOT move motor.
       // Motor movement only works in normal IDLE state.
@@ -515,6 +552,13 @@ export default {
         }
       };
       input.click();
+    },
+
+    updateSpeed(val) {
+      if (val !== this.lastSpeedSent) {
+        this.send({ payload: "SET_SPEED " + val });
+        this.lastSpeedSent = val;
+      }
     }
   }
 }

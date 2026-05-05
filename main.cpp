@@ -158,6 +158,7 @@ SystemState currentState =
 bool isHomed =
     false; // هل تم تصفير النظام؟ (يمنع أي حركة إذا كانت القيمة False)
 bool programRunning = false; // هل يوجد برنامج لحام يعمل الآن؟
+float speedPercentage = 100.0; // *** جديد *** نسبة سرعة المحرك (من 10 إلى 100)
 
 // متغيرات مصفوفة النقاط والزوايا
 int totalPositions = 0;       // إجمالي عدد الزوايا المحفوظة في القائمة
@@ -289,6 +290,20 @@ void processCommand(String cmd) {
     handleEmergencyStop(); // إيقاف طوارئ كامل (يدمر أي شيء ويطلب Homing)
   } else if (cmd.startsWith("START_PROGRAM")) {
     startProgram(cmd); // بدء تنفيذ اللحام عبر النقاط
+  } else if (cmd.startsWith("SET_SPEED ")) {
+    float newSpeed = cmd.substring(10).toFloat();
+    if (newSpeed >= 1.0 && newSpeed <= 100.0) {
+      speedPercentage = newSpeed;
+      // تطبيق السرعة فوراً إذا كان المحرك يتحرك يدوياً أو في البرنامج
+      if (currentState != HOMING) {
+        stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
+        if (currentState == MANUAL_MOVING) {
+          if (stepper.speed() > 0) stepper.setSpeed(MANUAL_SPEED * (speedPercentage / 100.0));
+          else stepper.setSpeed(-MANUAL_SPEED * (speedPercentage / 100.0));
+        }
+      }
+      sendToNodeRED("STATUS:SPEED_SET_TO_" + String((int)speedPercentage));
+    }
   } else if (cmd == "STATUS") {
     // إذا طلب Node-RED حالة النظام نرسل له حزمة معلومات (الزاوية، الحالة، هل تم
     // التصفير)
@@ -340,8 +355,8 @@ void handleMoveForward() {
   } // منع الحركة اليدوية أثناء تنفيذ البرنامج
 
   digitalWrite(ENABLE_PIN, LOW); // تفعيل المحرك
-  stepper.setMaxSpeed(MAX_SPEED);
-  stepper.setSpeed(MANUAL_SPEED); // إعطاء سرعة موجبة للأمام
+  stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
+  stepper.setSpeed(MANUAL_SPEED * (speedPercentage / 100.0)); // إعطاء سرعة موجبة للأمام
 
   currentState = MANUAL_MOVING; // تغيير الحالة لدوران يدوي
   updateLED(LED_BLUE);          // الإضاءة زرقاء (حركة)
@@ -360,10 +375,14 @@ void handleMoveBackward() {
     sendToNodeRED("ERROR:MOVE_DURING_PROGRAM");
     return;
   }
+  if (stepper.currentPosition() <= 0) {
+    sendToNodeRED("ERROR:CANNOT_MOVE_BELOW_ZERO");
+    return;
+  }
 
   digitalWrite(ENABLE_PIN, LOW); // تفعيل المحرك
-  stepper.setMaxSpeed(MAX_SPEED);
-  stepper.setSpeed(-MANUAL_SPEED); // إعطاء سرعة سالبة (عكسية) للخلف
+  stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
+  stepper.setSpeed(-MANUAL_SPEED * (speedPercentage / 100.0)); // إعطاء سرعة سالبة (عكسية) للخلف
 
   currentState = MANUAL_MOVING;
   updateLED(LED_BLUE);
@@ -561,7 +580,7 @@ void moveToCurrentTarget() {
       targetStepsArray[currentPositionIndex]; // سحب الزاوية من المصفوفة
                                               // تحويلها إلى خطوات (Steps)
 
-  stepper.setMaxSpeed(MAX_SPEED); // ضمان السرعة المحددة
+  stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0)); // استخدام السرعة المعدلة
   stepper.setAcceleration(
       PROGRAM_ACCELERATION); // إستخدام تسارع عالي جداً لإلغاء التوقف الناعم
   stepper.moveTo(
@@ -621,6 +640,19 @@ void handleSystemState() {
     break;
 
   case MANUAL_MOVING:
+    // *** جديد: منع المحرك من تجاوز نقطة الصفر بالسالب أثناء الدوران العكسي ***
+    if (stepper.speed() < 0 && stepper.currentPosition() <= 0) {
+      stepper.setSpeed(0); // إيقاف فوري
+      stepper.setCurrentPosition(0); // تأكيد الصفر
+      currentState = MANUAL_HOLD;
+      long currentSteps = stepper.currentPosition();
+      updateLED(LED_YELLOW);
+      sendToNodeRED("STATUS:MOTOR_STOPPED_AT_ZERO");
+      sendToNodeRED("STATUS:POSITION_CAPTURED_AT_" + String(currentSteps) + "_STEPS");
+      sendToNodeRED("STATUS:ADD_BUTTON_NOW_ENABLED");
+      break;
+    }
+
     // تحديث الزاوية الحية أثناء الدوران اليدوي
     if (millis() - lastStatusTime >= STATUS_UPDATE_INTERVAL_MS) {
       long currentSteps = stepper.currentPosition();
@@ -722,7 +754,7 @@ void handleSystemState() {
         sendToNodeRED("STATUS:RETURNING_TO_HOME");
         updateLED(LED_BLUE);
 
-        stepper.setMaxSpeed(MAX_SPEED);
+        stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
         stepper.setAcceleration(PROGRAM_ACCELERATION);
         stepper.moveTo(0);
 
