@@ -104,12 +104,12 @@ font-size: xxx-large;
           <!-- MANUAL JOGGING: disabled only when program is ACTIVELY running -->
           <v-row dense>
             <v-col cols="6">
-              <v-btn block color="orange" size="x-large" @click="moveBackward" :disabled="!isHomed || isProgramRunning || currentSteps <= 0">
+              <v-btn block color="orange" size="x-large" @click="moveBackward" :disabled="!isHomed || isProgramRunning || currentSteps <= 0 || isMoving">
                 <v-icon left>mdi-minus-box</v-icon> CCW
               </v-btn>
             </v-col>
             <v-col cols="6">
-              <v-btn block color="green" size="x-large" @click="moveForward" :disabled="!isHomed || isProgramRunning">
+              <v-btn block color="green" size="x-large" @click="moveForward" :disabled="!isHomed || isProgramRunning || isMoving">
                 <v-icon left>mdi-plus-box</v-icon> CW
               </v-btn>
             </v-col>
@@ -122,12 +122,26 @@ font-size: xxx-large;
           <v-row dense class="mt-3">
             <v-col cols="6">
               <v-btn block color="purple" size="x-large" @click="startHoming" :disabled="isMoving || isHoming || isProgramRunning">
-                <v-icon left>mdi-crosshairs-gps</v-icon> ZERO
+                <v-icon left>mdi-crosshairs-gps</v-icon> HOMING
               </v-btn>
             </v-col>
             <v-col cols="6">
               <v-btn block color="blue" size="x-large" @click="saveCurrentPosition" :disabled="isMoving || !isHomed || isProgramRunning">
                 <v-icon left>mdi-map-marker-plus</v-icon> ADD
+              </v-btn>
+            </v-col>
+          </v-row>
+
+          <!-- NEW BUTTONS: GO HOME & SET HOME -->
+          <v-row dense class="mt-3">
+            <v-col cols="6">
+              <v-btn block color="teal" size="x-large" @click="goHome" :disabled="isMoving || isHoming || isProgramRunning || !isHomed || currentSteps === 0">
+                <v-icon left>mdi-home-import-outline</v-icon> GO HOME
+              </v-btn>
+            </v-col>
+            <v-col cols="6">
+              <v-btn block color="indigo" size="x-large" @click="setHomeHere" :disabled="isMoving || isHoming || isProgramRunning">
+                <v-icon left>mdi-home-map-marker</v-icon> SET HOME
               </v-btn>
             </v-col>
           </v-row>
@@ -194,6 +208,23 @@ font-size: xxx-large;
       </v-col>
     </v-row>
 
+    <!-- SET HOME CONFIRMATION DIALOG -->
+    <v-dialog v-model="showHomeDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5 bg-warning text-white pa-4">
+          <v-icon left color="white">mdi-alert</v-icon> Set New Home Position
+        </v-card-title>
+        <v-card-text class="pa-4 text-h6 text-center">
+          You are about to zero the counter and set the new Home (0 steps) to this current physical position.<br><br>
+          Are you sure you want to proceed?
+        </v-card-text>
+        <v-card-actions class="pa-4 justify-center">
+          <v-btn color="grey-darken-1" variant="flat" size="large" @click="showHomeDialog = false">CANCEL</v-btn>
+          <v-btn color="red" variant="flat" size="large" @click="confirmSetHome">CONFIRM</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
   </v-container>
 </template>
 
@@ -214,7 +245,8 @@ export default {
       isArmed: false,
       activePositionIndex: -1, // لمعرفة أي نقطة يتم اللحام عليها حالياً
       motorSpeed: 100, // نسبة سرعة المحرك الافتراضية
-      lastSpeedSent: 100 // لتجنب إرسال نفس القيمة عدة مرات
+      lastSpeedSent: 100, // لتجنب إرسال نفس القيمة عدة مرات
+      showHomeDialog: false // للتحكم بظهور نافذة تأكيد الهوم
     }
   },
 
@@ -223,7 +255,7 @@ export default {
       if (this.isArmed)          return "ARMED - Waiting for Robot Start Signal...";
       if (this.isProgramRunning) return "Program Running...";
       if (this.isHoming)         return "Homing in progress...";
-      if (!this.isHomed)         return "NOT HOMED - Press ZERO button";
+      if (!this.isHomed)         return "NOT HOMED - Press HOMING button";
       if (this.isMoving)         return "Motor moving...";
       return "Ready";
     },
@@ -286,10 +318,10 @@ export default {
           if (part.startsWith('POS:'))   this.currentSteps = parseInt(part.split(':')[1]);
           if (part.startsWith('STATE:')) {
             const state = parseInt(part.split(':')[1]);
-            // States from Arduino: IDLE=0, HOMING=1, MANUAL_MOVING=2, ARMED=5, PROGRAM_MOVING=7
+            // States from Arduino: IDLE=0, HOMING=1, MANUAL_MOVING=2, ARMED=5, PROGRAM_MOVING=7, MANUAL_GO_HOME=13
             this.isArmed = (state === 5);
             this.isHoming = (state === 1);
-            this.isMoving = (state === 2 || state === 3 || state === 7 || state === 11);
+            this.isMoving = (state === 2 || state === 3 || state === 7 || state === 11 || state === 12 || state === 13);
             
             // إصلاح: إذا كان النظام فقط "مسلح" وينتظر الروبوت، يجب فك القفل عن الأزرار
             // ليتمكن المستخدم من الضغط عليها لإلغاء التسليح (Disarm)
@@ -333,7 +365,9 @@ export default {
         this.activePositionIndex = -1;
       }
 
-      if (text === "STATUS:MOTOR_STOPPED") {
+      if (text === "STATUS:MOTOR_STOPPED" || 
+          text === "STATUS:MOTOR_STOPPED_AT_ZERO" || 
+          text === "STATUS:RETURNED_TO_HOME_MANUALLY") {
         this.isMoving = false;
       }
 
@@ -394,7 +428,7 @@ export default {
     },
 
     saveCurrentPosition() {
-      if (!this.isHomed)    { alert("Must ZERO first!");                  return; }
+      if (!this.isHomed)    { alert("Must press HOMING first!");                  return; }
       if (this.isMoving)    { alert("Stop the motor first (press HOLD)"); return; }
       if (this.isProgramRunning) { return; }
 
@@ -456,7 +490,7 @@ export default {
     },
 
     moveForward() {
-      if (!this.isHomed) { alert("Must ZERO first!"); return; }
+      if (!this.isHomed) { alert("Must press HOMING first!"); return; }
       if (this.isProgramRunning) { return; }
       // If ARMED: only disarm (cancel waiting for robot), do NOT move motor.
       // Motor movement only works in normal IDLE state.
@@ -466,7 +500,7 @@ export default {
     },
 
     moveBackward() {
-      if (!this.isHomed) { alert("Must ZERO first!"); return; }
+      if (!this.isHomed) { alert("Must press HOMING first!"); return; }
       if (this.currentSteps <= 0) { alert("Cannot move below zero!"); return; }
       if (this.isProgramRunning) { return; }
       // If ARMED: only disarm (cancel waiting for robot), do NOT move motor.
@@ -491,6 +525,27 @@ export default {
       this.send({ payload: "HOMING" });
     },
 
+    goHome() {
+      if (!this.isHomed) { alert("System must be homed first!"); return; }
+      if (this.currentSteps === 0) { return; }
+      if (this.isProgramRunning) { return; }
+      if (this.isArmed) { this.disarmIfArmed(); } // Disarm but continue to move
+      
+      this.isMoving = true;
+      this.send({ payload: "GO_HOME" });
+    },
+
+    setHomeHere() {
+      if (this.isMoving || this.isHoming || this.isProgramRunning) return;
+      this.showHomeDialog = true; // إظهار النافذة المنبثقة الخاصة بـ Vuetify
+    },
+
+    confirmSetHome() {
+      this.showHomeDialog = false;
+      this.disarmIfArmed(); // Disarm if it was armed
+      this.send({ payload: "SET_HOME_HERE" });
+    },
+
     emergencyStop() {
       this.isHomed = false;
       this.isMoving = false;
@@ -505,7 +560,7 @@ export default {
 
     startProgram() {
       if (this.positions.length === 0) { alert("No positions saved!"); return; }
-      if (!this.isHomed)               { alert("Must ZERO first!");    return; }
+      if (!this.isHomed)               { alert("Must press HOMING first!");    return; }
       if (this.isArmed || this.isProgramRunning) { return; }
 
       const confirmation = confirm(

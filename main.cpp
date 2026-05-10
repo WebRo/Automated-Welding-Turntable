@@ -145,6 +145,7 @@ enum SystemState {
   DELAY_BEFORE_MOVE, // حالة الانتظار 3 ثواني لتفادي اصطدام الروبوت
   WELD_COMPLETE_DELAY, // تأخير مجهري 50 ملي ثانية لتحديث اللمبة بدون تجميد
   RETURNING_HOME,    // حالة العودة لنقطة الصفر في نهاية البرنامج (بدون تجميد)
+  MANUAL_GO_HOME,    // حالة العودة للصفر يدوياً بدون مستشعر
   ERROR,             // حالة الخطأ أو الطوارئ (لا يمكن عمل شيء إلا بعد التصفير من جديد)
   PROGRAM_COMPLETE   // حالة اكتمال البرنامج (غير مستخدمة في الوضع الجديد)
 };
@@ -189,6 +190,8 @@ void handleMoveForward();
 void handleMoveBackward();
 void handleHold();
 void handleAdd();
+void handleGoHome();          // عودة سريعة لنقطة الصفر المحددة
+void handleSetHomeHere();     // تحديد نقطة الصفر الحالية
 void handleDisarm();          // *** جديد *** إلغاء التسليح عند تدخل المشغّل
 void handleEmergencyStop();
 void startProgram(String cmd);
@@ -260,7 +263,7 @@ void loop() {
   // للحركة الموجهة (التصفير، تباطؤ، أو الذهاب لهدف محدد): نستخدم run()
   else if (stepper.distanceToGo() != 0 || currentState == MANUAL_DECELERATING ||
            currentState == PROGRAM_MOVING || currentState == RETURNING_HOME ||
-           currentState == HOMING) {
+           currentState == HOMING || currentState == MANUAL_GO_HOME) {
     stepper.run();
   }
 
@@ -284,6 +287,10 @@ void processCommand(String cmd) {
     handleHold(); // التوقف أثناء الحركة (يدوياً لالتقاط نقطة، أو برمجياً للطوارئ)
   } else if (cmd == "ADD") {
     handleAdd(); // إضافة الزاوية الحالية للمصفوفة
+  } else if (cmd == "GO_HOME") {
+    handleGoHome(); // عودة سريعة لنقطة الصفر بدون حساس
+  } else if (cmd == "SET_HOME_HERE") {
+    handleSetHomeHere(); // تحديد موضع الصفر في النقطة الحالية
   } else if (cmd == "DISARM") {
     handleDisarm(); // *** جديد *** المشغّل تدخّل أثناء ARMED → إلغاء التسليح والعودة لـ IDLE
   } else if (cmd == "STOP" || cmd == "ESTOP") {
@@ -470,6 +477,51 @@ void handleAdd() {
   currentState = IDLE;  // إعادة النظام لحالة الجاهزية لاستقبال الحركة التالية
 }
 
+// دالة العودة إلى الصفر يدويا (GO HOME)
+void handleGoHome() {
+  if (!isHomed) {
+    sendToNodeRED("ERROR:MUST_BE_HOMED_FIRST");
+    return;
+  }
+  if (programRunning || currentState == ARMED) {
+    sendToNodeRED("ERROR:CANNOT_MOVE_DURING_PROGRAM");
+    return;
+  }
+
+  digitalWrite(ENABLE_PIN, LOW); // تفعيل المحرك
+  updateLED(LED_BLUE);
+  stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
+  stepper.setAcceleration(PROGRAM_ACCELERATION); 
+  
+  // خدعة برمجية لإجبار مكتبة AccelStepper على إعادة حساب السرعة والمسار
+  // لأن الدوران اليدوي (runSpeed) يغير الموقع الحالي ولكن لا يغير الهدف (Target)
+  if (stepper.currentPosition() != 0) {
+    stepper.moveTo(stepper.currentPosition()); 
+    stepper.moveTo(0);
+  }
+
+  currentState = MANUAL_GO_HOME;
+  sendToNodeRED("STATUS:MOVING_TO_HOME_POSITION");
+}
+
+// دالة تحديد الصفر هنا (SET HOME)
+void handleSetHomeHere() {
+  if (programRunning || currentState == ARMED) {
+    sendToNodeRED("ERROR:CANNOT_SET_HOME_DURING_PROGRAM");
+    return;
+  }
+  
+  stepper.setSpeed(0); // إيقاف أي حركة فوراً
+  stepper.setCurrentPosition(0);
+  isHomed = true;
+  currentState = IDLE;
+  updateLED(LED_GREEN);
+
+  sendToNodeRED("HOMED"); // لإبلاغ الواجهة بأنه تم التصفير
+  sendToNodeRED("STEPS:0");
+  sendToNodeRED("STATUS:NEW_HOME_SET_SUCCESSFULLY");
+}
+
 // ============================================================================
 // *** جديد *** دالة إلغاء التسليح عند تدخّل المشغّل (DISARM)
 // تُستدعى عندما يضغط المشغّل أي زر (CW/CCW/HOLD/ADD/DELETE/EDIT...) أثناء ARMED
@@ -583,8 +635,10 @@ void moveToCurrentTarget() {
   stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0)); // استخدام السرعة المعدلة
   stepper.setAcceleration(
       PROGRAM_ACCELERATION); // إستخدام تسارع عالي جداً لإلغاء التوقف الناعم
-  stepper.moveTo(
-      targetSteps); // إرسال الأمر للمحرك للذهاب للموقع (Non-blocking)
+  
+  // خدعة برمجية لإجبار مكتبة AccelStepper على إعادة الحساب
+  stepper.moveTo(stepper.currentPosition());
+  stepper.moveTo(targetSteps); // إرسال الأمر للمحرك للذهاب للموقع (Non-blocking)
 
   currentState = PROGRAM_MOVING; // تغيير الحالة لـ "يتحرك لتنفيذ النقطة"
   updateLED(LED_BLUE);           // الإضاءة زرقاء (حركة)
@@ -759,6 +813,22 @@ void handleSystemState() {
         stepper.moveTo(0);
 
         currentState = RETURNING_HOME; // الانتقال للحالة الجديدة
+      }
+    }
+    break;
+
+  // حالة العودة للصفر يدوياً
+  case MANUAL_GO_HOME:
+    if (stepper.distanceToGo() == 0) {
+      currentState = IDLE;
+      updateLED(LED_GREEN);
+      sendToNodeRED("STEPS:0");
+      sendToNodeRED("STATUS:RETURNED_TO_HOME_MANUALLY");
+    } else {
+      if (millis() - lastStatusTime >= STATUS_UPDATE_INTERVAL_MS) {
+        long currentSteps = stepper.currentPosition();
+        sendToNodeRED("STEPS:" + String(currentSteps));
+        lastStatusTime = millis();
       }
     }
     break;
