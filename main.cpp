@@ -226,7 +226,7 @@ void setup() {
   // 3. ضبط القيم الأولية للأمان
   digitalWrite(ENABLE_PIN,
                HIGH); // تعطيل المحرك في البداية (HIGH يعطل المحرك في الغالب)
-  digitalWrite(RELAY_TO_COBOT, LOW); // إطفاء ريلاي إشارة الروبوت
+  digitalWrite(RELAY_TO_COBOT, HIGH); // إطفاء ريلاي إشارة الروبوت
 
   // 4. إعدادات مكتبة المحرك (السرعة القصوى والتسارع)
   stepper.setMaxSpeed(MAX_SPEED);
@@ -410,7 +410,7 @@ void handleHold() {
   // المحفوظة)
   if (programRunning) {
     stepper.stop();                    // توقيف المحرك بنعومة
-    digitalWrite(RELAY_TO_COBOT, LOW); // إيقاف ريلاي اللحام للروبوت
+    digitalWrite(RELAY_TO_COBOT, HIGH); // إيقاف ريلاي اللحام للروبوت
     programRunning = false;            // إيقاف عمل البرنامج
     isHomed = false;      // إبطال التصفير لاجبار المستخدم على التصفير مجدداً
     currentState = ERROR; // تحويل حالة النظام لخطأ
@@ -547,7 +547,7 @@ void handleEmergencyStop() {
   stepper.setCurrentPosition(
       stepper.currentPosition());    // تثبيت مكانه كهدف لعدم استكمال الحركة
   digitalWrite(ENABLE_PIN, HIGH);    // فصل الطاقة كلياً عن المحرك للأمان
-  digitalWrite(RELAY_TO_COBOT, LOW); // فصل إشارة اللحام عن الروبوت فوراً
+  digitalWrite(RELAY_TO_COBOT, HIGH); // فصل إشارة اللحام عن الروبوت فوراً
 
   isHomed = false;        // إبطال التصفير (يجب عمل Homing جديد)
   programRunning = false; // إغلاق البرنامج
@@ -753,7 +753,7 @@ void handleSystemState() {
   case RELAY_ACTIVE:
     // الانتظار حتى تنقضي ثانية واحدة (1000ms) بالضبط باستخدام millis()
     if (millis() - relayStartTime >= RELAY_PULSE_MS) {
-      digitalWrite(RELAY_TO_COBOT, LOW); // إيقاف الريلاي
+      digitalWrite(RELAY_TO_COBOT, HIGH); // إيقاف الريلاي
       sendToNodeRED("STATUS:RELAY_OFF_TO_COBOT");
 
       // الانتقال لحالة انتظار إشارة الانتهاء من الروبوت
@@ -868,7 +868,7 @@ void handleSystemState() {
 void activateRelayToCobot() {
   currentState = RELAY_ACTIVE;        // تغيير الحالة
   relayStartTime = millis();          // بدء مؤقت الريلاي
-  digitalWrite(RELAY_TO_COBOT, HIGH); // إرسال الإشارة للروبوت (HIGH)
+  digitalWrite(RELAY_TO_COBOT, LOW); // ????? ??????? ??????? (active-low)
 
   updateLED(LED_YELLOW); // الإضاءة صفراء دلالة على اللحام
   sendToNodeRED("STATUS:RELAY_ON_TO_COBOT");
@@ -899,3 +899,5 @@ void updateLED(uint32_t color) {
 
 // دالة لإرسال أي نص للسيريال بسهولة مع إضافة سطر جديد تلقائياً
 void sendToNodeRED(String message) { Serial.println(message); }
+
+
