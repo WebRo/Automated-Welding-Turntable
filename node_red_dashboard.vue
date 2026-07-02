@@ -14,18 +14,179 @@ padding: 0;
 text-align: center;
 font-size: xxx-large;
 }
+
+.actual-position-header {
+  flex-wrap: wrap;
+}
+
+.actual-position-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.actual-position-value {
+  line-height: 1;
+  font-size: 1.25rem;
+  color: #4caf50;
+}
+
+.actual-position-header .timeout-control {
+  margin-left: auto;
+}
+
+.timeout-control .timeout-chip {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.0892857143em;
+  box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+}
+
+.timeout-control .timeout-select .v-field {
+  min-height: 48px;
+  border-radius: 4px;
+  background-color: #1976d2;
+  color: white;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.0892857143em;
+  box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+}
+
+.timeout-control .timeout-select .v-field__input,
+.timeout-control .timeout-select .v-select__selection-text,
+.timeout-control .timeout-select .v-icon {
+  color: white;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.0892857143em;
+}
+
+
+.timeout-control .timeout-chip .v-chip__content,
+.timeout-control .timeout-select .v-select__selection-text,
+.timeout-control .timeout-select input {
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.0892857143em !important;
+}
+
+.timeout-control .timeout-select .v-field__input {
+  min-height: 48px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.position-row-inactive {
+  background-color: #eeeeee !important;
+  color: #8a8a8a;
+}
+
+.position-row-inactive td {
+  opacity: 0.72;
+}
+
+.position-status-btn {
+  min-width: 92px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+.pieces-counter-control {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pieces-counter-chip {
+  min-height: 48px;
+  border-radius: 4px;
+  padding: 0 20px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+}
+
+.pieces-reset-btn {
+  min-height: 40px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+.timeout-control.timeout-control .timeout-chip .v-chip__content,
+.timeout-control.timeout-control .timeout-select .v-field,
+.timeout-control.timeout-control .timeout-select .v-field__input,
+.timeout-control.timeout-control .timeout-select .v-select__selection,
+.timeout-control.timeout-control .timeout-select .v-select__selection-text,
+.timeout-control.timeout-control .timeout-select input,
+.timeout-control.timeout-control .timeout-select .v-icon {
+  font-family: Roboto, sans-serif !important;
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  line-height: 2.75rem !important;
+  letter-spacing: 0.0892857143em !important;
+  text-indent: 0.0892857143em !important;
+  text-transform: uppercase !important;
+}
+
+.timeout-control.timeout-control .timeout-chip .v-chip__content,
+.timeout-control.timeout-control .timeout-select .v-select__selection-text {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.pieces-counter-control.pieces-counter-control .pieces-counter-chip .v-chip__content,
+.pieces-counter-control.pieces-counter-control .pieces-reset-btn .v-btn__content {
+  font-family: Roboto, sans-serif !important;
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  line-height: 2.75rem !important;
+  letter-spacing: 0.0892857143em !important;
+  text-indent: 0.0892857143em !important;
+  text-transform: uppercase !important;
+}
+
+.pieces-counter-control.pieces-counter-control .pieces-counter-chip .v-chip__content,
+.pieces-counter-control.pieces-counter-control .pieces-reset-btn .v-btn__content {
+  display: inline-flex !important;
+  align-items: center !important;
+}
 </style>
 
 <template>
   <v-container fluid class="pa-4">
     <v-row>
-      
+
       <!-- ================= LEFT SIDE : POSITION TABLE ================= -->
       <v-col cols="12" md="7">
         <v-card elevation="3" class="pa-4">
-          <div class="d-flex justify-space-between align-center mb-4">
+          <div class="d-flex justify-space-between align-center mb-4" style="gap: 12px; flex-wrap: wrap;">
              <h2>WELDING POSITIONS</h2>
-             <v-chip color="primary" variant="flat">HOME : 0 STEPS</v-chip>
+             <div class="d-flex align-center pieces-counter-control">
+               <v-chip class="pieces-counter-chip" color="blue-grey" variant="flat">
+                 WELDED PIECES : {{ weldedPieces }}
+               </v-chip>
+               <v-btn
+                 class="pieces-reset-btn"
+                 :color="weldedPieces > 0 ? 'red' : 'grey'"
+                 variant="flat"
+                 size="small"
+                 :disabled="weldedPieces === 0"
+                 @click="resetWeldedPieces"
+               >
+                 RESET
+               </v-btn>
+             </div>
           </div>
 
           <table class="position-table mt-3" style="width: 100%; text-align: center; border-collapse: collapse;">
@@ -34,19 +195,34 @@ font-size: xxx-large;
                 <th style="padding: 12px;">#</th>
                 <th style="padding: 12px;">Position Name</th>
                 <th style="padding: 12px;">Steps</th>
+                <th style="padding: 12px;">Status</th>
                 <th style="padding: 12px;">Order</th>
                 <th style="padding: 12px;">Edit</th>
                 <th style="padding: 12px;">Delete</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(pos, index) in positions" :key="pos.id" 
-                  :style="{ borderBottom: '1px solid #eee', backgroundColor: activePositionIndex === index ? '#bbdefb' : 'transparent' }">
+              <tr v-for="(pos, index) in positions" :key="pos.id"
+                  :class="{ 'position-row-inactive': pos.active === false }"
+                  :style="{ borderBottom: '1px solid #eee', backgroundColor: activePositionIndex === index ? '#bbdefb' : (pos.active === false ? '#eeeeee' : 'transparent') }">
                 <td style="padding: 12px; font-weight: bold;">{{ index + 1 }}</td>
                 <td style="padding: 12px;">{{ pos.name }}</td>
-                <td style="padding: 12px; font-size: 1.2rem; color: #1976d2; font-weight: bold;">
+                <td :style="{ padding: '12px', fontSize: '1.2rem', color: pos.active === false ? '#777' : '#1976d2', fontWeight: 'bold' }">
                   <span v-if="!pos.editing">{{ pos.steps }}</span>
                   <v-text-field v-else type="number" density="compact" v-model.number="pos.steps" hide-details></v-text-field>
+                </td>
+                <td style="padding: 12px;">
+                  <v-btn
+                    size="small"
+                    icon
+                    class="position-status-btn"
+                    :color="pos.active === false ? 'grey' : 'green'"
+                    variant="flat"
+                    @click="togglePositionActive(pos)"
+                    :disabled="isProgramRunning"
+                  >
+                    <v-icon>{{ pos.active === false ? 'mdi-lock' : 'mdi-lock-open-variant' }}</v-icon>
+                  </v-btn>
                 </td>
                 <td style="padding: 12px;">
                   <!-- Disabled only when program is ACTIVELY running (not just armed) -->
@@ -58,8 +234,8 @@ font-size: xxx-large;
                   </v-btn>
                 </td>
                 <td style="padding: 12px;">
-                  <v-btn size="small" :color="pos.editing ? 'orange' : 'green'" @click="toggleEdit(pos)" :disabled="isProgramRunning">
-                    {{ pos.editing ? 'SAVE' : 'EDIT' }}
+                  <v-btn size="small" :color="pos.editing ? 'orange' : 'light-blue'" @click="toggleEdit(pos)" :disabled="isProgramRunning">
+                    <v-icon>{{ pos.editing ? 'mdi-content-save' : 'mdi-pencil' }}</v-icon>
                   </v-btn>
                 </td>
                 <td style="padding: 12px;">
@@ -69,7 +245,7 @@ font-size: xxx-large;
                 </td>
               </tr>
               <tr v-if="positions.length === 0">
-                <td colspan="6" style="padding: 20px; color: gray;">No positions added yet. Move motor and press ADD.</td>
+                <td colspan="7" style="padding: 20px; color: gray;">No positions added yet. Move motor and press ADD.</td>
               </tr>
             </tbody>
           </table>
@@ -93,11 +269,32 @@ font-size: xxx-large;
       <!-- ================= RIGHT SIDE : CONTROL PANEL ================= -->
       <v-col cols="12" md="5">
         <v-card elevation="3" class="pa-4 text-center">
-          
-          <h3 class="text-grey-darken-1 mb-2">ACTUAL POSITION (STEPS)</h3>
-          <div class="text-h2 font-weight-bold text-success mb-4">{{ currentSteps }}</div>
 
-          <v-alert class="mb-4 text-left" :color="statusColor" variant="tonal" border="start" border-color="primary">
+          <div class="d-flex justify-space-between align-center mb-2 actual-position-header" style="gap: 12px;">
+            <div class="actual-position-heading">
+              <h3 class="text-grey-darken-1 ma-0">ACTUAL POSITION (STEPS)</h3>
+              <div class="font-weight-bold actual-position-value">{{ currentSteps }}</div>
+            </div>
+            <div class="d-flex align-center timeout-control" style="gap: 12px;">
+              <v-chip class="timeout-chip" :color="cobotTimeoutChipColor" variant="flat">
+                {{ cobotTimeoutDisplay }}
+              </v-chip>
+              <v-select
+                v-model="cobotTimeoutSetting"
+                :items="cobotTimeoutOptions"
+                item-title="label"
+                item-value="value"
+                density="compact"
+                hide-details
+                variant="outlined"
+                class="timeout-select"
+                style="max-width: 170px;"
+                @update:model-value="sendCobotTimeout"
+              ></v-select>
+            </div>
+          </div>
+
+          <v-alert class="mt-4 mb-4 text-left" :color="statusColor" variant="tonal" border="start" border-color="primary">
             <strong>Status:</strong> {{ statusText }}
           </v-alert>
 
@@ -170,7 +367,7 @@ font-size: xxx-large;
           </v-row>
 
           <v-divider class="my-4"></v-divider>
-          
+
           <!-- MOTOR SPEED -->
           <h3 class="text-grey-darken-1 mb-2">MOTOR SPEED</h3>
           <v-slider
@@ -246,11 +443,36 @@ export default {
       activePositionIndex: -1, // لمعرفة أي نقطة يتم اللحام عليها حالياً
       motorSpeed: 100, // نسبة سرعة المحرك الافتراضية
       lastSpeedSent: 100, // لتجنب إرسال نفس القيمة عدة مرات
-      showHomeDialog: false // للتحكم بظهور نافذة تأكيد الهوم
+      showHomeDialog: false, // للتحكم بظهور نافذة تأكيد الهوم
+      weldedPieces: 0,
+      cobotTimeoutSetting: 900,
+      cobotSecondsLeft: null,
+      isWaitingCobot: false,
+      cobotTimeoutOptions: [
+        { label: "5 min", value: 300 },
+        { label: "15 min", value: 900 },
+        { label: "30 min", value: 1800 },
+        { label: "60 min", value: 3600 },
+        { label: "none", value: 0 }
+      ]
     }
   },
 
   computed: {
+    cobotTimeoutDisplay() {
+      if (this.cobotTimeoutSetting === 0) return "COBOT TIMEOUT : none";
+      if (this.isWaitingCobot && this.cobotSecondsLeft !== null) {
+        return "ERROR IN : " + this.cobotSecondsLeft + "s";
+      }
+      return "ERROR IN : " + this.cobotTimeoutSetting + "s";
+    },
+
+    cobotTimeoutChipColor() {
+      if (this.cobotTimeoutSetting === 0) return "grey";
+      if (this.isWaitingCobot) return "orange";
+      return "primary";
+    },
+
     statusText() {
       if (this.isArmed)          return "ARMED - Waiting for Robot Start Signal...";
       if (this.isProgramRunning) return "Program Running...";
@@ -282,10 +504,23 @@ export default {
     const saved = localStorage.getItem('welding_positions');
     if (saved) {
       try {
-        this.positions = JSON.parse(saved);
+        this.positions = JSON.parse(saved).map(pos => ({ ...pos, active: pos.active !== false }));
         this.nextId = Math.max(...this.positions.map(p => p.id || 0), 0) + 1;
       } catch(e) {}
     }
+
+    const savedPieces = localStorage.getItem('welding_welded_pieces');
+    if (savedPieces !== null) {
+      const parsedPieces = parseInt(savedPieces);
+      if (!isNaN(parsedPieces)) this.weldedPieces = parsedPieces;
+    }
+
+    const savedTimeout = localStorage.getItem('welding_cobot_timeout_seconds');
+    if (savedTimeout !== null) {
+      const parsedTimeout = parseInt(savedTimeout);
+      if (!isNaN(parsedTimeout)) this.cobotTimeoutSetting = parsedTimeout === 120 ? 900 : parsedTimeout;
+    }
+    this.sendCobotTimeout();
   },
 
   beforeDestroy() {
@@ -322,7 +557,7 @@ export default {
             this.isArmed = (state === 5);
             this.isHoming = (state === 1);
             this.isMoving = (state === 2 || state === 3 || state === 7 || state === 11 || state === 12 || state === 13);
-            
+
             // إصلاح: إذا كان النظام فقط "مسلح" وينتظر الروبوت، يجب فك القفل عن الأزرار
             // ليتمكن المستخدم من الضغط عليها لإلغاء التسليح (Disarm)
             if (this.isArmed) {
@@ -336,9 +571,9 @@ export default {
       // [2] Transient UI updates (للأحداث العابرة وتنبيهات الأخطاء السريعة)
       // Arduino restarted
       if (text.startsWith("STATUS:MOVING_TO_POSITION_")) {
-        this.activePositionIndex = parseInt(text.substring(26)) - 1;
+        this.activePositionIndex = this.activePositionToRowIndex(parseInt(text.substring(26)) - 1);
       }
-      
+
       if (text === "STATUS:RETURNING_TO_HOME" || text === "STATUS:CYCLE_COMPLETE_PIECE_DONE") {
         this.activePositionIndex = -1;
       }
@@ -351,6 +586,9 @@ export default {
         this.isProgramRunning = false;
         this.isArmed = false;
         this.currentSteps = 0;
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
+        this.sendCobotTimeout();
       }
 
       if (text.startsWith("STEPS:")) {
@@ -365,8 +603,8 @@ export default {
         this.activePositionIndex = -1;
       }
 
-      if (text === "STATUS:MOTOR_STOPPED" || 
-          text === "STATUS:MOTOR_STOPPED_AT_ZERO" || 
+      if (text === "STATUS:MOTOR_STOPPED" ||
+          text === "STATUS:MOTOR_STOPPED_AT_ZERO" ||
           text === "STATUS:RETURNED_TO_HOME_MANUALLY") {
         this.isMoving = false;
       }
@@ -389,7 +627,28 @@ export default {
       // One cycle finished, Arduino re-armed itself → buttons available again
       if (text === "STATUS:CYCLE_COMPLETE_PIECE_DONE") {
         this.isProgramRunning = false;
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
+        this.weldedPieces++;
+        localStorage.setItem('welding_welded_pieces', String(this.weldedPieces));
         // isArmed will be set true by the next ARMED_WAITING message from Arduino
+      }
+
+      if (text === "STATUS:WAITING_FOR_COBOT_RESPONSE") {
+        this.isWaitingCobot = true;
+        this.cobotSecondsLeft = this.cobotTimeoutSetting === 0 ? null : this.cobotTimeoutSetting;
+      }
+
+      if (text.startsWith("STATUS:WAITING_FOR_COBOT_RESPONSE_SECONDS_LEFT:")) {
+        this.isWaitingCobot = true;
+        this.cobotSecondsLeft = parseInt(text.split(':').pop());
+      }
+
+      if (text === "STATUS:COBOT_FINISHED_WAITING_3_SECONDS" ||
+          text.startsWith("STATUS:WELD_COMPLETE_POSITION_") ||
+          text === "STATUS:RETURNING_TO_HOME") {
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
       }
 
       // Arduino confirmed disarm (user took action while armed)
@@ -397,6 +656,8 @@ export default {
           text === "STATUS:CONFIGURATION_UNLOCKED") {
         this.isArmed = false;
         this.isProgramRunning = false;
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
       }
 
       // E-STOP or error resets everything
@@ -410,11 +671,35 @@ export default {
         this.isMoving = false;
         this.isProgramRunning = false;
         this.isArmed = false;
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
       }
     }
   },
 
   methods: {
+    resetWeldedPieces() {
+      this.weldedPieces = 0;
+      localStorage.setItem('welding_welded_pieces', '0');
+    },
+
+    activePositionToRowIndex(activeIndex) {
+      let seenActive = -1;
+      for (let index = 0; index < this.positions.length; index++) {
+        if (this.positions[index].active !== false) {
+          seenActive++;
+          if (seenActive === activeIndex) return index;
+        }
+      }
+      return -1;
+    },
+
+    sendCobotTimeout() {
+      localStorage.setItem('welding_cobot_timeout_seconds', String(this.cobotTimeoutSetting));
+      this.cobotSecondsLeft = null;
+      this.send({ payload: "SET_COBOT_TIMEOUT " + this.cobotTimeoutSetting });
+    },
+
     // ---------------------------------------------------------------
     // disarmIfArmed: Called before ANY user action.
     // If the system is currently ARMED, sends DISARM to Arduino and
@@ -424,6 +709,8 @@ export default {
       if (this.isArmed) {
         this.send({ payload: "DISARM" });
         this.isArmed = false;
+        this.isWaitingCobot = false;
+        this.cobotSecondsLeft = null;
       }
     },
 
@@ -438,10 +725,17 @@ export default {
         id: this.nextId++,
         name: "POS " + (this.positions.length + 1),
         steps: this.currentSteps,
-        editing: false
+        editing: false,
+        active: true
       };
       this.positions.push(newPos);
       this.send({ payload: "ADD" });
+    },
+
+    togglePositionActive(pos) {
+      if (this.isProgramRunning) return;
+      pos.active = pos.active === false;
+      this.disarmIfArmed();
     },
 
     deletePosition(index) {
@@ -466,7 +760,7 @@ export default {
           return; // منع الحفظ
         }
         pos.steps = parsedSteps; // حفظ الرقم النظيف
-        
+
         // positions changed → disarm
         this.disarmIfArmed();
       }
@@ -521,6 +815,7 @@ export default {
       if (this.isMoving) { alert("Stop motor first (press HOLD)"); return; }
       if (this.isProgramRunning) { return; }
       this.disarmIfArmed(); // Homing while armed → disarm
+      this.resetWeldedPieces();
       this.isHoming = true;
       this.send({ payload: "HOMING" });
     },
@@ -530,7 +825,7 @@ export default {
       if (this.currentSteps === 0) { return; }
       if (this.isProgramRunning) { return; }
       if (this.isArmed) { this.disarmIfArmed(); } // Disarm but continue to move
-      
+
       this.isMoving = true;
       this.send({ payload: "GO_HOME" });
     },
@@ -542,6 +837,7 @@ export default {
 
     confirmSetHome() {
       this.showHomeDialog = false;
+      this.resetWeldedPieces();
       this.disarmIfArmed(); // Disarm if it was armed
       this.send({ payload: "SET_HOME_HERE" });
     },
@@ -563,15 +859,17 @@ export default {
       if (!this.isHomed)               { alert("Must press HOMING first!");    return; }
       if (this.isArmed || this.isProgramRunning) { return; }
 
+      const activePositions = this.positions.filter(pos => pos.active !== false);
+      if (activePositions.length === 0) { alert("No active positions selected!"); return; }
+
       const confirmation = confirm(
-        `Start program with ${this.positions.length} positions?\n\nTable will wait for robot signal before moving.`
+        `Start program with ${activePositions.length} active positions?\n\nInactive positions will be skipped.`
       );
       if (confirmation) {
-        let stepList = this.positions.map(p => p.steps).join(" ");
+        let stepList = activePositions.map(p => p.steps).join(" ");
         this.send({ payload: "START_PROGRAM " + stepList });
       }
     },
-
     saveToFile() {
       // Saving to file does NOT change positions, so no disarm needed
       const data = { timestamp: new Date().toISOString(), positions: this.positions };
@@ -598,7 +896,7 @@ export default {
               const data = JSON.parse(event.target.result);
               if (data.positions && Array.isArray(data.positions)) {
                 this.disarmIfArmed(); // Loading new positions → must re-arm
-                this.positions = data.positions;
+                this.positions = data.positions.map(pos => ({ ...pos, active: pos.active !== false }));
                 this.nextId = Math.max(...this.positions.map(p => p.id || 0)) + 1;
               } else { alert("Invalid file format!"); }
             } catch (err) { alert("Error reading file: " + err.message); }

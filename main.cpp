@@ -101,7 +101,7 @@ const int LED_COUNT =
 #define RELAY_PULSE_MS                                                         \
   1000 // مدة النبضة التي ترسل للروبوت للبدء (يجب أن تكون 1 ثانية بالضبط)
 #define COBOT_TIMEOUT_MS                                                       \
-  120000 // مهلة الانتظار للروبوت (دقيقتين، إذا تأخر يعتبر خطأ)
+  900000 // مهلة الانتظار للروبوت (دقيقتين، إذا تأخر يعتبر خطأ)
 #define HOMING_TIMEOUT_MS                                                      \
   30000 // مهلة عملية التصفير (30 ثانية لتجنب دوران المحرك للأبد إذا كان
         // المستشعر تالفاً)
@@ -160,6 +160,7 @@ bool isHomed =
     false; // هل تم تصفير النظام؟ (يمنع أي حركة إذا كانت القيمة False)
 bool programRunning = false; // هل يوجد برنامج لحام يعمل الآن؟
 float speedPercentage = 100.0; // *** جديد *** نسبة سرعة المحرك (من 10 إلى 100)
+unsigned long cobotTimeoutMs = COBOT_TIMEOUT_MS;
 
 // متغيرات مصفوفة النقاط والزوايا
 int totalPositions = 0;       // إجمالي عدد الزوايا المحفوظة في القائمة
@@ -297,6 +298,18 @@ void processCommand(String cmd) {
     handleEmergencyStop(); // إيقاف طوارئ كامل (يدمر أي شيء ويطلب Homing)
   } else if (cmd.startsWith("START_PROGRAM")) {
     startProgram(cmd); // بدء تنفيذ اللحام عبر النقاط
+  } else if (cmd.startsWith("SET_COBOT_TIMEOUT ")) {
+    long timeoutSeconds = cmd.substring(18).toInt();
+    if (timeoutSeconds >= 0 && timeoutSeconds <= 3600) {
+      cobotTimeoutMs = (unsigned long)timeoutSeconds * 1000UL;
+      if (cobotTimeoutMs == 0) {
+        sendToNodeRED("STATUS:COBOT_TIMEOUT_DISABLED");
+      } else {
+        sendToNodeRED("STATUS:COBOT_TIMEOUT_SET_TO_" + String(timeoutSeconds) + "_SECONDS");
+      }
+    } else {
+      sendToNodeRED("ERROR:INVALID_COBOT_TIMEOUT");
+    }
   } else if (cmd.startsWith("SET_SPEED ")) {
     float newSpeed = cmd.substring(10).toFloat();
     if (newSpeed >= 1.0 && newSpeed <= 100.0) {
@@ -491,12 +504,12 @@ void handleGoHome() {
   digitalWrite(ENABLE_PIN, LOW); // تفعيل المحرك
   updateLED(LED_BLUE);
   stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0));
-  stepper.setAcceleration(PROGRAM_ACCELERATION); 
-  
+  stepper.setAcceleration(PROGRAM_ACCELERATION);
+
   // خدعة برمجية لإجبار مكتبة AccelStepper على إعادة حساب السرعة والمسار
   // لأن الدوران اليدوي (runSpeed) يغير الموقع الحالي ولكن لا يغير الهدف (Target)
   if (stepper.currentPosition() != 0) {
-    stepper.moveTo(stepper.currentPosition()); 
+    stepper.moveTo(stepper.currentPosition());
     stepper.moveTo(0);
   }
 
@@ -510,7 +523,7 @@ void handleSetHomeHere() {
     sendToNodeRED("ERROR:CANNOT_SET_HOME_DURING_PROGRAM");
     return;
   }
-  
+
   stepper.setSpeed(0); // إيقاف أي حركة فوراً
   stepper.setCurrentPosition(0);
   isHomed = true;
@@ -635,7 +648,7 @@ void moveToCurrentTarget() {
   stepper.setMaxSpeed(MAX_SPEED * (speedPercentage / 100.0)); // استخدام السرعة المعدلة
   stepper.setAcceleration(
       PROGRAM_ACCELERATION); // إستخدام تسارع عالي جداً لإلغاء التوقف الناعم
-  
+
   // خدعة برمجية لإجبار مكتبة AccelStepper على إعادة الحساب
   stepper.moveTo(stepper.currentPosition());
   stepper.moveTo(targetSteps); // إرسال الأمر للمحرك للذهاب للموقع (Non-blocking)
@@ -774,13 +787,13 @@ void handleSystemState() {
       sendToNodeRED("STATUS:COBOT_FINISHED_WAITING_3_SECONDS");
     }
     // 2. التحقق من انتهاء المهلة القصوى لانتظار الروبوت (Timeout - 120 ثانية)
-    else if (millis() - cobotWaitStartTime >= COBOT_TIMEOUT_MS) {
+    else if (cobotTimeoutMs > 0 && millis() - cobotWaitStartTime >= cobotTimeoutMs) {
       // إعلان خطأ وإيقاف النظام
       handleError("WELD_TIMEOUT_POSITION_" + String(currentPositionIndex + 1));
     }
     // 3. إرسال عد تنازلي يظهر في الواجهة لتوضيح المهلة المتبقية كل ثانية
-    else if (millis() - lastCountdownTime >= COUNTDOWN_UPDATE_INTERVAL_MS) {
-      int secondsLeft = (COBOT_TIMEOUT_MS - (millis() - cobotWaitStartTime)) /
+    else if (cobotTimeoutMs > 0 && millis() - lastCountdownTime >= COUNTDOWN_UPDATE_INTERVAL_MS) {
+      int secondsLeft = (cobotTimeoutMs - (millis() - cobotWaitStartTime)) /
                         1000; // حساب الثواني المتبقية
       sendToNodeRED("STATUS:WAITING_FOR_COBOT_RESPONSE_SECONDS_LEFT:" +
                     String(secondsLeft));
@@ -899,5 +912,3 @@ void updateLED(uint32_t color) {
 
 // دالة لإرسال أي نص للسيريال بسهولة مع إضافة سطر جديد تلقائياً
 void sendToNodeRED(String message) { Serial.println(message); }
-
-
